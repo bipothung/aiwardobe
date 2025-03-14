@@ -3,56 +3,45 @@
 
 "use client";
 import { useState, useEffect } from "react";
+import { getWardrobeItems, deleteWardrobeItem } from "@/lib/appwrite";
 
 const WardrobeGallery = () => {
   const [wardrobeItems, setWardrobeItems] = useState([]);
   const [activeFilter, setActiveFilter] = useState("all");
   const [filteredItems, setFilteredItems] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Load items from local storage
-  const loadItemsFromStorage = () => {
+  // Load items from Appwrite
+  const loadItems = async () => {
     try {
-      const storedItems = JSON.parse(
-        localStorage.getItem("wardrobeItems") || "[]"
-      );
-      setWardrobeItems(storedItems);
-      filterItems(storedItems, activeFilter);
+      console.log("Loading items from Appwrite...");
+      const items = await getWardrobeItems();
+      console.log("Retrieved items:", items);
+      setWardrobeItems(items);
+      filterItems(items, activeFilter);
     } catch (error) {
-      console.error("Error loading from local storage:", error);
+      console.error("Error loading from Appwrite:", error);
       setWardrobeItems([]);
       setFilteredItems([]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   // Filter items based on selected category
   const filterItems = (items, filter) => {
+    console.log("Filtering items with filter:", filter);
     if (filter === "all") {
       setFilteredItems(items);
     } else {
-      setFilteredItems(items.filter((item) => item.type === filter));
+      const filtered = items.filter((item) => item.type === filter);
+      console.log("Filtered items:", filtered);
+      setFilteredItems(filtered);
     }
   };
 
   useEffect(() => {
-    // Initial load
-    loadItemsFromStorage();
-
-    // Add event listeners for storage changes
-    const handleStorageChange = () => {
-      loadItemsFromStorage();
-    };
-
-    const handleWardrobeUpdate = () => {
-      loadItemsFromStorage();
-    };
-
-    window.addEventListener("storage", handleStorageChange);
-    window.addEventListener("wardrobeUpdated", handleWardrobeUpdate);
-
-    return () => {
-      window.removeEventListener("storage", handleStorageChange);
-      window.removeEventListener("wardrobeUpdated", handleWardrobeUpdate);
-    };
+    loadItems();
   }, []);
 
   // Update filtered items when filter changes
@@ -61,22 +50,25 @@ const WardrobeGallery = () => {
   }, [activeFilter, wardrobeItems]);
 
   // Handle item deletion
-  const handleDeleteItem = (itemId) => {
+  const handleDeleteItem = async (itemId) => {
     try {
-      const storedItems = JSON.parse(
-        localStorage.getItem("wardrobeItems") || "[]"
-      );
-      const updatedItems = storedItems.filter((item) => item.id !== itemId);
-      localStorage.setItem("wardrobeItems", JSON.stringify(updatedItems));
-      loadItemsFromStorage();
-
-      // Dispatch event to notify other components
-      const event = new Event("wardrobeUpdated");
-      window.dispatchEvent(event);
+      console.log("Deleting item:", itemId);
+      await deleteWardrobeItem(itemId);
+      console.log("Item deleted successfully");
+      loadItems(); // Reload items after deletion
     } catch (error) {
       console.error("Error deleting item:", error);
+      alert("Failed to delete item. Please try again.");
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="p-8 text-center">
+        <h2 className="text-xl font-bold mb-4">Loading...</h2>
+      </div>
+    );
+  }
 
   if (wardrobeItems.length === 0) {
     return (
@@ -149,9 +141,9 @@ const WardrobeGallery = () => {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {filteredItems.map((item, index) => (
+        {filteredItems.map((item) => (
           <div
-            key={item.id || index}
+            key={item.$id}
             className="border rounded-lg p-2 bg-white shadow-sm hover:shadow-md transition-shadow relative group"
           >
             <div className="aspect-square overflow-hidden rounded">
@@ -166,22 +158,17 @@ const WardrobeGallery = () => {
               />
             </div>
             <p className="text-center mt-2 font-medium">{item.name}</p>
-            {item.type && (
-              <p className="text-center text-xs text-gray-500 capitalize">
-                {item.type}
-              </p>
-            )}
+            <p className="text-center text-xs text-gray-500 capitalize">
+              {item.type}
+            </p>
 
-            {/* Delete button - only show for user-added items */}
-            {item.id && (
-              <button
-                onClick={() => handleDeleteItem(item.id)}
-                className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                title="Delete item"
-              >
-                ×
-              </button>
-            )}
+            <button
+              onClick={() => handleDeleteItem(item.$id)}
+              className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Delete item"
+            >
+              ×
+            </button>
           </div>
         ))}
       </div>

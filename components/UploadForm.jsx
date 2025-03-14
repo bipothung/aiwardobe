@@ -1,23 +1,17 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { uploadImage } from "@/lib/imagekit";
+import { addWardrobeItem } from "@/lib/appwrite";
 
 const UploadForm = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [itemName, setItemName] = useState("");
   const [itemType, setItemType] = useState("top");
   const [preview, setPreview] = useState(null);
+  const [imageUrl, setImageUrl] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const router = useRouter();
-
-  // Debug function to check local storage
-  useEffect(() => {
-    const items = localStorage.getItem("wardrobeItems");
-    console.log(
-      "Current wardrobe items in storage:",
-      items ? JSON.parse(items) : []
-    );
-  }, []);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -32,6 +26,7 @@ const UploadForm = () => {
       reader.readAsDataURL(file);
     } else {
       setPreview(null);
+      setImageUrl("");
     }
   };
 
@@ -44,39 +39,29 @@ const UploadForm = () => {
       setIsUploading(true);
       console.log("Starting upload process...");
 
-      // Get existing wardrobe items
-      const existingItems = JSON.parse(
-        localStorage.getItem("wardrobeItems") || "[]"
-      );
-      console.log("Existing items:", existingItems);
+      // Upload image to ImageKit
+      const fileName = `${Date.now()}-${selectedFile.name}`;
+      const uploadedImageUrl = await uploadImage(selectedFile, fileName);
+      setImageUrl(uploadedImageUrl);
+      console.log("Image uploaded:", uploadedImageUrl);
 
-      // Create new item
+      // Create item in Appwrite
       const newItem = {
-        id: Date.now().toString(),
         name: itemName,
         type: itemType,
-        imageUrl: preview,
+        imageUrl: uploadedImageUrl,
         dateAdded: new Date().toISOString(),
       };
-      console.log("New item to add:", newItem);
 
-      // Add new item to array
-      const updatedItems = [...existingItems, newItem];
-
-      // Save to local storage
-      localStorage.setItem("wardrobeItems", JSON.stringify(updatedItems));
-      console.log("Updated wardrobe items:", updatedItems);
-
-      // Dispatch a custom event to notify other components
-      const event = new Event("wardrobeUpdated");
-      window.dispatchEvent(event);
-      console.log("Dispatched wardrobeUpdated event");
+      const result = await addWardrobeItem(newItem);
+      console.log("Item added to database:", result);
 
       // Reset form
       setSelectedFile(null);
       setItemName("");
       setItemType("top");
       setPreview(null);
+      setImageUrl("");
       setIsUploading(false);
 
       // Show success message
@@ -84,15 +69,8 @@ const UploadForm = () => {
 
       // Force refresh to update the UI
       router.refresh();
-
-      // Check if items were actually saved
-      const checkStorage = localStorage.getItem("wardrobeItems");
-      console.log(
-        "Verification - Items in storage after save:",
-        checkStorage ? JSON.parse(checkStorage) : []
-      );
     } catch (error) {
-      console.error("Error saving to local storage:", error);
+      console.error("Error saving item:", error);
       alert("Failed to save item. Please try again.");
       setIsUploading(false);
     }
@@ -142,6 +120,18 @@ const UploadForm = () => {
             disabled={isUploading}
           />
         </div>
+
+        {imageUrl && (
+          <div>
+            <label className="block text-sm font-medium mb-1">Image URL:</label>
+            <input
+              type="text"
+              value={imageUrl}
+              readOnly
+              className="w-full border p-2 rounded bg-gray-50"
+            />
+          </div>
+        )}
 
         {preview && (
           <div className="mt-2">
